@@ -13,6 +13,10 @@ const authRoute = require('./routes/auth')
 app.use('/api/posts',postsRoute)
 app.use('/api/user',authRoute)
 
+app.get('/', (req,res)=>{
+    res.send('Welcome to the Piazza App!')
+})
+
 const connectDB = async () => {
     try {
         await mongoose.connect(process.env.DB_CONNECTOR);
