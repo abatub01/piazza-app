@@ -1,31 +1,29 @@
+const joi = require('joi')
 const Post = require('../models/post');
 
-//const expirationValidation
-
-
-// Validation to check if a post exists
-const PostExists = async (req, res, next) => {
-    try {
-        const post = await Post.findById(req.params.postId);
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found.' });
-        }
-        req.post = post; // Attach the post to the request
-        next();
-    } catch (error) {
-        res.status(500).json({ message: 'Error finding post.', error: error.message });
-    }
+//Input Validation for posts
+const postsValidation = (data) => {
+    const schemaValidation = joi.object({
+        title: joi.string().required().min(1).max(256),
+        text: joi.string().required().min(1).max(500),
+        expiration: joi.number().required().min(1),
+        topic: joi.array()
+            .items(joi.string().valid('Politics', 'Health', 'Sport', 'Tech'))
+            .required()
+            .min(1) // Ensure at least one topic is provided
+    });
+    return schemaValidation.validate(data);
 };
 
-// Validation to check interaction rules
-const interactionValidation = async (req, res, next) => {
-    const { userId, interactionType } = req.body;
 
-    // Check if the user is the owner of the post
-    if (req.post.owner.userId.toString() === userId && interactionType === 'like') {
-        return res.status(403).json({ message: 'Post owners cannot like their own posts.' });
-    }
-    next();
+//Input Validation for comments
+const commentsValidation = (data) => {
+    const schemaValidation = joi.object({
+        message: joi.string().required().min(1).max(500)
+    });
+    return schemaValidation.validate(data);
 };
 
-module.exports = { PostExists, interactionValidation };
+
+module.exports = { commentsValidation, postsValidation };
+

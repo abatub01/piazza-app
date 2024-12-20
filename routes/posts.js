@@ -5,30 +5,34 @@ const Post = require('../models/post')
 const Interaction = require('../models/interaction')
 const Comment = require('../models/comment')
 const verifyToken = require('../verifyToken')
-
+const {postsValidation, commentsValidation} = require('../validations/posts_validation')
 
 // create Post
 router.post('/', verifyToken, async (req, res) => {
     try {
         // Retrieve user info from the token 
         const userId = req.user._id; 
-        //const user_Name = req.user.username; 
 
-        // Expiration date: transforming from minutes input to date format in the database
-        const expiration = req.body.expiration;
-        let expirationDate = null;
-
-        if (typeof expiration === 'number') {
-            const currentTime = new Date();
-            expirationDate = new Date(currentTime.getTime() + expiration * 60000);
-        } else {
-            return res.status(400).json({
-                message: 'Invalid expiration format. Provide a number representing minutes from now.'
-            });
+        //Input validation: formatting
+        const {error} = postsValidation(req.body);
+        if (error) {
+            return res.status(400).send({message:error['details'][0]['message']})
         }
 
-        //validation for input
+        //Topic validation: must be within chosen topics: this is already included in postsValidation, but as alternative:
+        const topics = req.body.topic;
 
+        const validTopics = ['Politics', 'Health', 'Sport', 'Tech'];
+        const invalidTopics = topics.filter(topic => !validTopics.includes(topic));
+
+        if (invalidTopics.length > 0) {
+            return res.status(400).json({ message: 'Invalid topic(s)' });
+        }
+
+        // Expiration date: transforming from minutes input to date format in the database 
+        const expirationMinutes = req.body.expiration;
+        const expirationDate = new Date(Date.now() + expirationMinutes * 60000);
+        
         // Create a new post with owner details
         const postData = new Post({
             title: req.body.title,
@@ -36,18 +40,15 @@ router.post('/', verifyToken, async (req, res) => {
             text: req.body.text,
             expiration: expirationDate,
             owner: userId
-            //{
-            //    userId: userId,
-            //    username: user_Name
-            //},
         });
         // Save the post to the database
         const postToSave = await postData.save();
         res.status(201).json(postToSave);
     } catch (err) {
-        res.status(500).json({ message: 'Error saving the post', error: err.message });
+        res.status(400).send({message:err})
     }
 });
+
 
 
 // Get Posts (Read all)
@@ -68,7 +69,6 @@ router.get('/', verifyToken, async(req,res) =>{
     }
 })
 
-// token when accepting the amp
 
 // Get Post (Read by ID)
 router.get('/:postId', verifyToken, async(req,res) =>{
@@ -84,6 +84,8 @@ router.get('/:postId', verifyToken, async(req,res) =>{
         res.status(400).send({message:err})
     }
 });
+
+
 
 // Get Post (by Topic)
 router.get('/topic/:topictitle', verifyToken, async(req, res) => {
@@ -118,40 +120,7 @@ router.get('/topic/:topictitle', verifyToken, async(req, res) => {
     }
 });
 
-// Search Post (by Topic)
-router.post('/topic', verifyToken, async(req, res) => {
-    try{
-        
-        // Ensure that topics is an array
-        const topics = req.body.topic;
-        
-        if (!Array.isArray(topics) || topics.length === 0) {
-            return res.status(400).json({ message: 'Please provide an array of topic(s).' });
-        }
 
-        // Validate if each topic is one of the allowed enum values
-        const validTopics = ['Politics', 'Health', 'Sport', 'Tech'];
-        const invalidTopics = topics.filter(topic => !validTopics.includes(topic));
-
-        if (invalidTopics.length > 0) {
-            return res.status(400).json({ message: 'Invalid topic(s)' });
-        }
-        //find topics
-        const postByTopic = await Post.find({
-            topic: { $in: topics }
-        });
-
-        // Adding expiration Status
-        const postsWithStatus = postByTopic.map(post => {
-            const postObject = post.toObject();
-            postObject['status'] = Date.now() <= post.expiration ? 'Live' : 'Expired';
-            return postObject;
-        });
-        res.send(postsWithStatus)
-    }catch(err){
-        res.status(400).send({message:err})
-    }
-})
 
 // Search Expired Posts
 router.get('/expired/all', verifyToken, async(req, resp) => {
@@ -173,8 +142,9 @@ router.get('/expired/all', verifyToken, async(req, resp) => {
     }
 });
 
-// Search Expired Posts on Topics
 
+
+// Search Expired Posts on Topics
 router.get('/expired/:topictitle', verifyToken, async(req, resp) => {
     try {
         const topics = req.params.topictitle;
@@ -200,6 +170,8 @@ router.get('/expired/:topictitle', verifyToken, async(req, resp) => {
     }
 });
 
+
+
 // Search Active Posts
 router.get('/active/all', verifyToken, async(req, resp) => {
     try {
@@ -220,8 +192,8 @@ router.get('/active/all', verifyToken, async(req, resp) => {
     }
 });
 
-// Search Active Posts on Topics
 
+// Search Active Posts on Topics
 router.get('/active/:topictitle', verifyToken, async(req, resp) => {
     try {
         const topics = req.params.topictitle;
@@ -247,8 +219,9 @@ router.get('/active/:topictitle', verifyToken, async(req, resp) => {
     }
 });
 
-// Query Posts with Highest Interest
 
+
+// Query Posts with Highest Interest
 router.post('/highest-interest', verifyToken, async(req, res) => {
     try {
         const topic = req.body.topic
@@ -395,6 +368,8 @@ router.post('/:postId/dislike', verifyToken, async(req, resp) => {
     }
 });
 
+
+
 // Interaction 3: Comment on Post
 router.post('/:postId/comment', verifyToken, async(req, resp) => {
     const post = await Post.findById(req.params.postId);
@@ -404,7 +379,13 @@ router.post('/:postId/comment', verifyToken, async(req, resp) => {
         return resp.status(400).send({message: 'The post has Expired.'});
     }
 
-    // Validation 2: user input
+    //Validation 2: user input
+    const {error} = postsValidation(req.body);
+    if (error) {
+        return res.status(400).send({message:error['details'][0]['message']})
+    }
+
+    // Validation 3: user input - may not contain only whitespaces too (avoid spam comments)
     if (!req.body.message || req.body.message.trim().length === 0) {
         return resp.status(400).send({message: 'Comment message is required.'});
     }

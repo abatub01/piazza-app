@@ -1,7 +1,7 @@
 const { send } = require('express/lib/response')
 const jsonwebtoken = require('jsonwebtoken')
 
-
+// verification function
 function auth(req,res,next){
     const token = req.header('auth-token')
     if(!token){

@@ -12,7 +12,7 @@ const InteractionSchema = new mongoose.Schema({
     },
     interactionType: {
         type: String,
-        enum: ['like', 'dislike', 'comment'],
+        enum: ['like', 'dislike'],
         required: true
     },
     comment: { type: String, default: null }, // Only filled if interactionType is 'comment'
