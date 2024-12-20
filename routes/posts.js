@@ -56,18 +56,21 @@ router.get('/', verifyToken, async(req,res) =>{
     try{
         const posts = await Post.find().populate('owner', 'username');  // Populate the `owner` field with username and email
         // Populate the 'comment.commenter' field within the 'comments' array
-        await posts.populate('comments.commenter', 'username'); 
-        // Adding expiration Status
-        const postsWithStatus = posts.map(posts => {
-        const postsObject = posts.toObject();
-        postsObject['status'] = Date.now() <= posts['expiration'] ? 'Live' : 'Expired';
-        return postsObject;
-    });
+        const populatedPosts = await Post.populate(posts, { 
+            path: 'comments.commenter', 
+            select: 'username' 
+        });
+        // Add expiration status to each post
+        const postsWithStatus = populatedPosts.map(post => {
+            const postObject = post.toObject();
+            postObject['status'] = Date.now() <= new Date(post.expiration) ? 'Live' : 'Expired';
+            return postObject;
+        });
         res.send(postsWithStatus)
     }catch(err){
         res.status(400).send({message:err})
     }
-})
+});
 
 
 // Get Post (Read by ID)
@@ -222,12 +225,12 @@ router.get('/active/:topictitle', verifyToken, async(req, resp) => {
 
 
 // Query Posts with Highest Interest
-router.post('/highest-interest', verifyToken, async(req, res) => {
+router.get('/filter/highest-interest', verifyToken, async(req, res) => {
     try {
-        const topic = req.body.topic
+        const topic = req.body.topic || null;
         const status = req.body.status || 'All'; // default is All if no body.status is written
         // Validate if the topic is one of the allowed enum values
-        if (!['Politics', 'Health', 'Sport', 'Tech'].includes(topic)) {
+        if (topic && !['Politics', 'Health', 'Sport', 'Tech'].includes(topic)) {
             return res.status(400).json({ message: 'Invalid topic' });
         }       
         // Validate if the topic is one of the allowed enum values
@@ -236,7 +239,11 @@ router.post('/highest-interest', verifyToken, async(req, res) => {
         }
         
         // Define match criteria based on status
-        const matchCriteria = { topic };
+        const matchCriteria = {};
+        if (topic) {
+            matchCriteria.topic = topic; // Include topic if provided
+        }
+        
         if (status === 'Live') {
             matchCriteria.expiration = { $gt: new Date() }; // Live posts
         } else if (status === 'Expired') {
@@ -380,7 +387,7 @@ router.post('/:postId/comment', verifyToken, async(req, resp) => {
     }
 
     //Validation 2: user input
-    const {error} = postsValidation(req.body);
+    const {error} = commentsValidation(req.body);
     if (error) {
         return res.status(400).send({message:error['details'][0]['message']})
     }
